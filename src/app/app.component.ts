@@ -1,7 +1,7 @@
 import { Component, HostListener, OnInit } from '@angular/core';
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
-import { Observable, catchError, from, map, of } from 'rxjs';
+import { Observable } from 'rxjs';
 
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,10 +13,10 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 
-import { Connection, clusterApiUrl } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { BaseWalletAdapter, WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { getFavoriteDomain } from '@bonfida/spl-name-service';
 
+import { SolanaService } from './solana.service';
 import { WalletBottomSheetComponent } from './wallet-bottom-sheet/wallet-bottom-sheet.component';
 
 @Component({
@@ -46,15 +46,14 @@ export class AppComponent implements OnInit {
   networks = Object.entries(WalletAdapterNetwork)
                    .map(([ key, value ]) => ({ key, value }));
 
-  connection: Connection | undefined;
-
-  getAccount: Observable<string | undefined> | undefined;
+  getAccount: Observable<string> | undefined;
   getBalance: Observable<number> | undefined;
 
   private _selectedNetwork = WalletAdapterNetwork.Mainnet;
   private _currentWallet: BaseWalletAdapter | undefined;
 
   constructor(
+    private solService: SolanaService,
     private bottomSheet: MatBottomSheet,
   ) {
     // TODO: local storage
@@ -79,7 +78,8 @@ export class AppComponent implements OnInit {
     }
 
     let ref = this.bottomSheet.open(WalletBottomSheetComponent);
-    ref.afterDismissed().subscribe((wallet) => this.currentWallet = wallet);
+    ref.afterDismissed()
+       .subscribe((wallet) => this.currentWallet = wallet);
   }
 
   disconnect() {
@@ -89,41 +89,14 @@ export class AppComponent implements OnInit {
     }
   }
 
-  connectNetwork() {
-    let endpoint = clusterApiUrl(this.selectedNetwork);
-    if (this.selectedNetwork == WalletAdapterNetwork.Mainnet) {
-      // TODO: move to environment
-      endpoint = "https://solana-mainnet.g.alchemy.com/v2/sxlC7jbdleGW3qk5eSCrxvnnPCEXQKxF";
-    }
-
-    const connection = new Connection(endpoint, 'confirmed');
-    connection.getVersion()
-              .then(version => {
-                console.log(`Network: ${this.selectedNetwork}, Version: ${JSON.stringify(version)}`);
-
-                this.connection = connection;
-                this.refreshAccount();
-              })
-              .catch(err => console.error(err));
-  }
-
-  async refreshAccount() {
-    if ((this.connection == undefined) || 
-        (this.currentWallet == undefined) || 
+  refreshAccount() {
+    if ((this.currentWallet == undefined) || 
         (this.currentWallet.publicKey == null)) {
       return;
     }
 
-    this.getAccount = from(
-      getFavoriteDomain(this.connection, this.currentWallet.publicKey)
-    ).pipe(
-      map(({domain, reverse, stale}) => reverse + '.sol'),
-      catchError(err => of(this.currentWallet?.publicKey?.toBase58().slice(0, 10) + '...')),
-    );
-
-    this.getBalance = from(
-      this.connection.getBalance(this.currentWallet.publicKey)
-    ).pipe(map((balance) => balance / 1_000_000_000));
+    this.getAccount = this.solService.getAccount(this.currentWallet.publicKey);
+    this.getBalance = this.solService.getBalance(this.currentWallet.publicKey);
   }
 
   get selectedNetwork(): WalletAdapterNetwork {
@@ -133,15 +106,18 @@ export class AppComponent implements OnInit {
   set selectedNetwork(value: WalletAdapterNetwork) {
     this._selectedNetwork = value;
 
-    this.connection = undefined;
-    this.connectNetwork();
+    this.solService.connect(value).subscribe({
+      next: (version) => console.log(`network: ${value}, version: ${JSON.stringify(version)}`),
+      error: (err) => console.error(err),
+      complete: () => this.refreshAccount()
+    });;
   }
 
-  get currentWallet(): BaseWalletAdapter | undefined {
+  public get currentWallet(): BaseWalletAdapter | undefined {
     return this._currentWallet;
   }
 
-  set currentWallet(value: BaseWalletAdapter | undefined) {
+  public set currentWallet(value: BaseWalletAdapter | undefined) {
     if ((value == undefined) || (value.publicKey == null)) {
       return;
     }
@@ -151,5 +127,9 @@ export class AppComponent implements OnInit {
     this._currentWallet = value;
 
     this.refreshAccount();
+  }
+
+  public get connection(): Connection {
+    return this.solService.connection;
   }
 }

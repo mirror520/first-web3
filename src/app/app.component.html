@@ -25,7 +25,7 @@
     } @else {
       {{ getBalance | async | currency: 'SOL' }}
       <button mat-button [matMenuTriggerFor]="menu">
-        {{ (currentWallet.publicKey?.toString() | slice : 0 : 10) + '...' }}
+        {{ getAccount | async }}
       </button>
       <mat-menu #menu="matMenu">
         <mat-form-field>

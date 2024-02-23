@@ -1,7 +1,7 @@
 import { Component, HostListener, OnInit } from '@angular/core';
-import { AsyncPipe, CurrencyPipe, SlicePipe } from '@angular/common';
+import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
-import { Observable, from, map } from 'rxjs';
+import { Observable, catchError, from, map, of } from 'rxjs';
 
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,6 +15,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 
 import { Connection, clusterApiUrl } from '@solana/web3.js';
 import { BaseWalletAdapter, WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { getFavoriteDomain } from '@bonfida/spl-name-service';
 
 import { WalletBottomSheetComponent } from './wallet-bottom-sheet/wallet-bottom-sheet.component';
 
@@ -24,7 +25,6 @@ import { WalletBottomSheetComponent } from './wallet-bottom-sheet/wallet-bottom-
   imports: [
     AsyncPipe,
     CurrencyPipe,
-    SlicePipe,
     RouterOutlet,
     MatBottomSheetModule,
     MatButtonModule,
@@ -48,6 +48,7 @@ export class AppComponent implements OnInit {
 
   connection: Connection | undefined;
 
+  getAccount: Observable<string | undefined> | undefined;
   getBalance: Observable<number> | undefined;
 
   private _selectedNetwork = WalletAdapterNetwork.Mainnet;
@@ -106,15 +107,23 @@ export class AppComponent implements OnInit {
               .catch(err => console.error(err));
   }
 
-  refreshAccount() {
+  async refreshAccount() {
     if ((this.connection == undefined) || 
         (this.currentWallet == undefined) || 
         (this.currentWallet.publicKey == null)) {
       return;
     }
 
-    this.getBalance = from(this.connection.getBalance(this.currentWallet?.publicKey))
-                     .pipe(map((balance) => balance / 1_000_000_000));
+    this.getAccount = from(
+      getFavoriteDomain(this.connection, this.currentWallet.publicKey)
+    ).pipe(
+      map(({domain, reverse, stale}) => reverse + '.sol'),
+      catchError(err => of(this.currentWallet?.publicKey?.toBase58().slice(0, 10) + '...')),
+    );
+
+    this.getBalance = from(
+      this.connection.getBalance(this.currentWallet.publicKey)
+    ).pipe(map((balance) => balance / 1_000_000_000));
   }
 
   get selectedNetwork(): WalletAdapterNetwork {
@@ -137,7 +146,7 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    value.addListener('connect', (pubkey) => this.refreshAccount());
+    value.addListener('connect', (_) => this.refreshAccount());
 
     this._currentWallet = value;
 

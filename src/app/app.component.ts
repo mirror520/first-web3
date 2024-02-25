@@ -1,6 +1,6 @@
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit, ViewChild } from '@angular/core';
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { Observable } from 'rxjs';
 
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
@@ -10,13 +10,15 @@ import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDrawer, MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 
-import { Connection } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { BaseWalletAdapter, WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 
 import { SolanaService } from './solana.service';
+import { WalletService } from './wallet.service';
 import { WalletBottomSheetComponent } from './wallet-bottom-sheet/wallet-bottom-sheet.component';
 
 @Component({
@@ -50,11 +52,15 @@ export class AppComponent implements OnInit {
   getBalance: Observable<number> | undefined;
 
   private _selectedNetwork = WalletAdapterNetwork.Mainnet;
-  private _currentWallet: BaseWalletAdapter | undefined;
+
+  @ViewChild(MatDrawer) drawer?: MatDrawer;
 
   constructor(
-    private solService: SolanaService,
+    private router: Router,
     private bottomSheet: MatBottomSheet,
+    private snackBar: MatSnackBar,
+    private solService: SolanaService,
+    private walletService: WalletService,
   ) {
     // TODO: local storage
     this.selectedNetwork = WalletAdapterNetwork.Devnet;
@@ -72,11 +78,6 @@ export class AppComponent implements OnInit {
   openWalletBottomSheet() {
     this.disconnect();
 
-    if (this.currentWallet != undefined) {
-      this.currentWallet.disconnect();
-      this.currentWallet = undefined;
-    }
-
     let ref = this.bottomSheet.open(WalletBottomSheetComponent);
     ref.afterDismissed()
        .subscribe((wallet) => this.currentWallet = wallet);
@@ -89,14 +90,26 @@ export class AppComponent implements OnInit {
     }
   }
 
-  refreshAccount() {
-    if ((this.currentWallet == undefined) || 
-        (this.currentWallet.publicKey == null)) {
-      return;
-    }
+  walletConnectHandler(pubkey: PublicKey) {
+    console.log(`wallet connected, pubkey: ${pubkey}`);
+    this.snackBar.open('WALLET CONNECTED', 'DISMISS', {
+      duration: 3000,
+    });
 
-    this.getAccount = this.solService.getAccount(this.currentWallet.publicKey);
-    this.getBalance = this.solService.getBalance(this.currentWallet.publicKey);
+    this.refreshAccount(pubkey);
+  }
+
+  refreshAccount(pubkey: PublicKey) {
+    this.getAccount = this.solService.getAccount(pubkey);
+    this.getBalance = this.solService.getBalance(pubkey);
+  }
+
+  switchRouter(url: string) {
+    this.router.navigateByUrl(url);
+
+    if (this.width < 1024) {
+      this.drawer?.close();
+    }
   }
 
   get selectedNetwork(): WalletAdapterNetwork {
@@ -106,27 +119,36 @@ export class AppComponent implements OnInit {
   set selectedNetwork(value: WalletAdapterNetwork) {
     this._selectedNetwork = value;
 
+    this.getAccount = undefined;
+    this.getBalance = undefined;
+
     this.solService.connect(value).subscribe({
       next: (version) => console.log(`network: ${value}, version: ${JSON.stringify(version)}`),
       error: (err) => console.error(err),
-      complete: () => this.refreshAccount()
+      complete: () => {
+        if ((this.currentWallet != undefined) && 
+            (this.currentWallet.publicKey != null)) {
+          this.refreshAccount(this.currentWallet.publicKey);
+        }
+      }
     });;
   }
 
   public get currentWallet(): BaseWalletAdapter | undefined {
-    return this._currentWallet;
+    return this.walletService.currentWallet;
   }
 
   public set currentWallet(value: BaseWalletAdapter | undefined) {
-    if ((value == undefined) || (value.publicKey == null)) {
+    if (value == undefined) {
       return;
     }
 
-    value.addListener('connect', (_) => this.refreshAccount());
+    if (value.publicKey != null) {
+      this.walletConnectHandler(value.publicKey);
+    }
 
-    this._currentWallet = value;
-
-    this.refreshAccount();
+    this.walletService.currentWallet = value;
+    this.walletService.addConnectHandler(this.walletConnectHandler);
   }
 
   public get connection(): Connection {

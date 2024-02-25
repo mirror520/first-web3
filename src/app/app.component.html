@@ -3,7 +3,7 @@
               [mode]="(width >= 1024) ? 'side' : 'over'" 
               [opened]="(width >= 1024)">
     <mat-nav-list>
-      <mat-list-item>Airdrop</mat-list-item>
+      <mat-list-item (click)="switchRouter('/airdrop')">Airdrop</mat-list-item>
       <mat-list-item>Swap</mat-list-item>
       <mat-list-item>Name Service</mat-list-item>
     </mat-nav-list>
@@ -16,7 +16,7 @@
         <mat-icon>menu</mat-icon>
       </button>     
     }
-      <span>{{ title }}</span>
+      <a (click)="switchRouter('/')">{{ title }}</a>
       <span class="spacer"></span>
     @if (currentWallet == undefined) {
       <button mat-raised-button (click)="openWalletBottomSheet()">

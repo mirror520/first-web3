@@ -4,6 +4,8 @@
               [opened]="(width >= 1024)">
     <mat-nav-list>
       <mat-list-item (click)="switchRouter('/airdrop')">Airdrop</mat-list-item>
+      <mat-list-item (click)="switchRouter('/transfer')">Transfer</mat-list-item>
+      <mat-list-item (click)="switchRouter('/mint')">Mint</mat-list-item>
       <mat-list-item>Swap</mat-list-item>
       <mat-list-item>Name Service</mat-list-item>
     </mat-nav-list>
@@ -24,7 +26,9 @@
           Connect Wallet
       </button>
     } @else {
-      {{ getBalance | async | currency: 'SOL' }}
+      <span matTooltip="{{ getBalance | async }}">
+        {{ getBalance | async | currency: 'SOL' }}
+      </span>
       <button mat-button [matMenuTriggerFor]="menu">
         {{ getAccount | async }}
       </button>

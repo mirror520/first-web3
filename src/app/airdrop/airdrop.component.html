@@ -10,12 +10,9 @@
           <input matSliderThumb [(value)]="lamports">
         </mat-slider>
       </form>
+      <mat-divider></mat-divider>
     </mat-card-content>
-    <mat-divider></mat-divider>
     <mat-card-actions align="end">
-    @if (errorMsg) {
-      <p class="error-msg">{{ errorMsg }}</p>
-    }
       <button mat-raised-button 
               [disabled]="currentWallet == undefined"
               (click)="requestAirdrop(lamports)">
@@ -28,4 +25,8 @@
     }
     </mat-card-footer>
   </mat-card>
+
+  @if (errorMsg) {
+    <p class="error-msg">{{ errorMsg }}</p>
+  }
 </div>

@@ -5,13 +5,15 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatSliderModule } from '@angular/material/slider';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
-
-import { WalletService } from '../wallet.service';
-import { SolanaService } from '../solana.service';
 import { BaseWalletAdapter } from '@solana/wallet-adapter-base';
+
+import { SolanaService } from '../solana.service';
+import { WalletService } from '../wallet.service';
+import { TransactionSnackbarComponent } from '../transaction-snackbar/transaction-snackbar.component';
 
 @Component({
   selector: 'app-airdrop',
@@ -29,7 +31,7 @@ import { BaseWalletAdapter } from '@solana/wallet-adapter-base';
 })
 export class AirdropComponent {
   min = 0;
-  max = 2 * LAMPORTS_PER_SOL;
+  max = 10 * LAMPORTS_PER_SOL;
   step = 0.01 * LAMPORTS_PER_SOL;
   lamports = 2 * LAMPORTS_PER_SOL;
 
@@ -37,8 +39,9 @@ export class AirdropComponent {
   loading: boolean = false;
 
   constructor(
-    private walletService: WalletService,
+    private snackBar: MatSnackBar,
     private solService: SolanaService,
+    private walletService: WalletService,
   ) {
   }
 
@@ -47,15 +50,30 @@ export class AirdropComponent {
   }
 
   requestAirdrop(lamports: number) {
-    if ((this.currentWallet == undefined) || 
-        (this.currentWallet.publicKey == null)) {
+    const wallet = this.currentWallet;
+    if (wallet == undefined) {
+      return
+    }
+
+    const pubkey = wallet.publicKey;
+    if (pubkey == null) {
       return
     }
 
     this.loading = true;
 
-    this.solService.requestAirdrop(this.currentWallet.publicKey, lamports).subscribe({
-      next: (result) => console.log(result),
+    this.solService.requestAirdrop(pubkey, lamports).subscribe({
+      next: (signature) => {
+        this.snackBar.openFromComponent(TransactionSnackbarComponent, {
+          data: {
+            signature: signature,
+            network: this.solService.network,
+            action: () => {
+              this.walletService.walletChange.emit(pubkey)
+            },
+          }
+        });
+      },
       error: (err) => this.errorMsg = err,
       complete: () => this.loading = false,
     });

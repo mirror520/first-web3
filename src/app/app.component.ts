@@ -1,7 +1,7 @@
-import { Component, HostListener, OnInit, ViewChild } from '@angular/core';
+import { Component, HostListener, ViewChild } from '@angular/core';
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Router, RouterOutlet } from '@angular/router';
-import { Observable, concatAll, map } from 'rxjs';
+import { Observable, concatAll, map, share } from 'rxjs';
 
 import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
 import { MatButtonModule } from '@angular/material/button';
@@ -43,19 +43,19 @@ import { WalletBottomSheetComponent } from './wallet-bottom-sheet/wallet-bottom-
   templateUrl: './app.component.html',
   styleUrl: './app.component.sass'
 })
-export class AppComponent implements OnInit {
+export class AppComponent {
   title = 'Web3';
-  width = document.documentElement.clientWidth;
+  width = window.innerWidth;
 
   networks = Object.entries(WalletAdapterNetwork)
                    .map(([ key, value ]) => ({ key, value }));
 
-  getAccount: Observable<string>;
-  getBalance: Observable<number>;
+  getAccount: Observable<string | undefined>;
+  getBalance: Observable<number | undefined>;
 
   private _selectedNetwork = WalletAdapterNetwork.Mainnet;
 
-  @ViewChild(MatDrawer) drawer?: MatDrawer;
+  @ViewChild(MatDrawer) drawer: MatDrawer | undefined;
 
   constructor(
     private router: Router,
@@ -67,20 +67,24 @@ export class AppComponent implements OnInit {
     // TODO: local storage
     this.selectedNetwork = WalletAdapterNetwork.Devnet;
 
-    this.solService.networkChange.asObservable().subscribe({
-      next: () => {
-        if (this.walletService.currentWallet == undefined) {
-          return;
-        }
+    this.solService.connectionChange.subscribe({
+      next: (_) => {
+        const wallet = this.walletService.currentWallet;
+        if (wallet == undefined) return;
 
-        this.walletService.walletChange.emit();
+        const pubkey = wallet.publicKey;
+        if (pubkey == null) return;
+
+        this.walletService.refreshWallet(pubkey);
       },
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     });
 
-    this.walletService.walletChange.asObservable().subscribe({
+    this.walletService.walletChange.subscribe({
       next: (pubkey) => {
+        if (pubkey == null) return;
+
         console.log(`wallet connected, pubkey: ${pubkey}`);
 
         this.snackBar.open('WALLET CONNECTED', 'OK', {
@@ -91,19 +95,16 @@ export class AppComponent implements OnInit {
       complete: () => console.log('complete'),
     });
 
-    this.getAccount = this.walletService.walletChange.asObservable().pipe(
+    this.getAccount = this.walletService.walletChange.pipe(
       map((pubkey) => this.solService.getAccount(pubkey)),
       concatAll(),
     );
 
-    this.getBalance = this.walletService.walletChange.asObservable().pipe(
+    this.getBalance = this.walletService.walletChange.pipe(
       map((pubkey) => this.solService.getBalance(pubkey)),
       concatAll(),
+      share(),
     );
-  }
-
-  ngOnInit(): void {
-    this.width = window.innerWidth;
   }
 
   @HostListener('window:resize', ['$event'])
@@ -116,7 +117,7 @@ export class AppComponent implements OnInit {
 
     let ref = this.bottomSheet.open(WalletBottomSheetComponent);
     ref.afterDismissed()
-       .subscribe((wallet) => this.currentWallet = wallet);
+       .subscribe((wallet: BaseWalletAdapter) => this.currentWallet = wallet);
   }
 
   disconnect() {
@@ -141,8 +142,13 @@ export class AppComponent implements OnInit {
   set selectedNetwork(value: WalletAdapterNetwork) {
     this._selectedNetwork = value;
 
+    if (value == this.solService.network) {
+      return;
+    }
+
     this.solService.connect(value).subscribe({
-      next: (version) => console.log(`network: ${value}, version: ${JSON.stringify(version)}`),
+      next: (version) => 
+        console.log(`network: ${value}, version: ${JSON.stringify(version)}`),
       error: (err) => console.error(err),
       complete: () => console.log('complete'),
     });
@@ -153,15 +159,7 @@ export class AppComponent implements OnInit {
   }
 
   public set currentWallet(value: BaseWalletAdapter | undefined) {
-    if (value == undefined) {
-      return
-    }
-
     this.walletService.currentWallet = value;
-
-    if (value.publicKey != null) {
-      this.walletService.walletChange.emit(value.publicKey)
-    }
   }
 
   public get connection(): Connection {

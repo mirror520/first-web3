@@ -1,5 +1,5 @@
-import { EventEmitter, Injectable } from '@angular/core';
-import { Observable, from, of } from 'rxjs';
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable, from, of } from 'rxjs';
 
 import { Connection, PublicKey } from '@solana/web3.js';
 import { BaseWalletAdapter } from '@solana/wallet-adapter-base';
@@ -11,8 +11,9 @@ import { Transaction } from './codec';
 })
 export class WalletService {
   private _currentWallet: BaseWalletAdapter | undefined;
+  private _walletChangeSubject = new BehaviorSubject<PublicKey | null>(null);
 
-  walletChange = new EventEmitter<PublicKey>();
+  walletChange = this._walletChangeSubject.asObservable();
 
   public sendTransaction(trx: Transaction, connection: Connection): Observable<string | undefined> {
     if (this.currentWallet == undefined) {
@@ -26,22 +27,31 @@ export class WalletService {
     ));
   }
 
+  public refreshWallet(pubkey: PublicKey) {
+    this._walletChangeSubject.next(pubkey);
+  }
+
   public get currentWallet(): BaseWalletAdapter | undefined {
     return this._currentWallet;
   }
 
   public set currentWallet(value: BaseWalletAdapter | undefined) {
-    if (value == undefined) {
-      return
-    }
+    const wallet = value;
+    if (wallet == undefined) return;
+
+    const pubkey = wallet.publicKey
+    if (pubkey == null) return;
 
     if (this._currentWallet != undefined) {
       this._currentWallet.removeListener('connect');
       this._currentWallet = undefined;
     }
 
-    this._currentWallet = value;
+    this._currentWallet = wallet;
 
-    value.addListener('connect', (pubkey) => this.walletChange.emit(pubkey))
+    wallet.addListener('connect', 
+      (pubkey) => this.refreshWallet(pubkey))
+
+    this.refreshWallet(pubkey);
   }
 }

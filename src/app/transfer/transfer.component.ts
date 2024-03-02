@@ -1,3 +1,4 @@
+import { SlicePipe } from '@angular/common';
 import { Component } from '@angular/core';
 import { concatAll, map } from 'rxjs';
 
@@ -17,6 +18,7 @@ import { Account } from '../codec';
   selector: 'app-transfer',
   standalone: true,
   imports: [
+    SlicePipe,
     MatButtonModule,
     MatIconModule,
     MatTableModule,

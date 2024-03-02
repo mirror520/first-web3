@@ -1,5 +1,5 @@
-import { EventEmitter, Injectable } from '@angular/core';
-import { Observable, catchError, from, map, of, share } from 'rxjs';
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable, catchError, from, map, of } from 'rxjs';
 
 import { 
   Connection, 
@@ -32,8 +32,9 @@ import { environment as env } from '../environments/environment';
 export class SolanaService {
   private _network = WalletAdapterNetwork.Devnet;
   private _connection: Connection;
+  private _connectionChangeSubject = new BehaviorSubject<Connection | null>(null);
 
-  networkChange = new EventEmitter<void>();
+  connectionChange = this._connectionChangeSubject.asObservable();
 
   constructor() {
     let endpoint = clusterApiUrl(this.network);
@@ -56,7 +57,9 @@ export class SolanaService {
     return from(this.connection.getVersion());
   }
 
-  getAccount(pubkey: PublicKey): Observable<string> {
+  getAccount(pubkey: PublicKey | null): Observable<string | undefined> {
+    if (pubkey == null) return of(undefined);
+
     return from(
       getFavoriteDomain(this.connection, pubkey), 
     ).pipe(
@@ -65,12 +68,13 @@ export class SolanaService {
     );
   }
 
-  getBalance(pubkey: PublicKey): Observable<number> {
+  getBalance(pubkey: PublicKey | null): Observable<number | undefined> {
+    if (pubkey == null) return of(undefined);
+
     return from(
       this.connection.getBalance(pubkey),
     ).pipe(
       map((balance) => balance / LAMPORTS_PER_SOL),
-      share(),
     );
   }
 
@@ -167,8 +171,6 @@ export class SolanaService {
 
   public set network(value: WalletAdapterNetwork) {
     this._network = value;
-
-    this.networkChange.emit();
   }
 
   public get connection(): Connection {
@@ -177,5 +179,7 @@ export class SolanaService {
 
   public set connection(value: Connection) {
     this._connection = value;
+
+    this._connectionChangeSubject.next(value);
   }
 }

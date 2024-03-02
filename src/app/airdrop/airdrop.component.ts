@@ -68,9 +68,7 @@ export class AirdropComponent {
           data: {
             signature: signature,
             network: this.solService.network,
-            action: () => {
-              this.walletService.walletChange.emit(pubkey)
-            },
+            action: () => this.walletService.refreshWallet(pubkey),
           }
         });
       },

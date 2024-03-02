@@ -8,11 +8,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 
 import { PublicKey } from '@solana/web3.js';
-import { RawAccount } from '@solana/spl-token';
 
 import { SolanaService } from '../solana.service';
 import { WalletService } from '../wallet.service';
-import { Account } from '../codec';
+import { AssociatedTokenAccount } from '../model/account';
 
 @Component({
   selector: 'app-transfer',
@@ -28,14 +27,13 @@ import { Account } from '../codec';
 })
 export class TransferComponent {
   displayedColumns: string[] = ['mint', 'amount'];
-  tokenAccounts: Account<RawAccount>[] = new Array();
+  tokenAccounts: AssociatedTokenAccount[] = new Array();
 
   constructor(
     private snackBar: MatSnackBar,
     private solService: SolanaService,
     private walletService: WalletService,
-  ) {
-  }
+  ) { }
 
   refreshTokens() {
     const wallet = this.walletService.currentWallet;
@@ -45,9 +43,7 @@ export class TransferComponent {
     }
 
     const pubkey = wallet.publicKey;
-    if (pubkey == null) {
-      return
-    }
+    if (pubkey == null) return;
 
     this.solService.getTokenAccountsByOwner(pubkey).subscribe({
       next: (accounts) => {

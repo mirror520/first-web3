@@ -4,9 +4,15 @@
               [opened]="(width >= 1024)">
     <mat-nav-list>
       <mat-list-item (click)="switchRouter('/airdrop')">Airdrop</mat-list-item>
-      <mat-list-item (click)="switchRouter('/transfer')">Transfer</mat-list-item>
-      <mat-list-item (click)="switchRouter('/mint')">Mint</mat-list-item>
-      <mat-list-item>Swap</mat-list-item>
+      <div mat-subheader>Token</div>
+      <mat-list-item (click)="switchRouter('/transfer')">
+        <mat-icon matListItemIcon>currency_exchange</mat-icon>
+        <div matListItemTitle>Transfer</div>
+      </mat-list-item>
+      <mat-list-item (click)="switchRouter('/mint')">
+        <mat-icon matListItemIcon>precision_manufacturing</mat-icon>
+        <div matListItemTitle>Mint</div>
+      </mat-list-item>
       <mat-list-item>Name Service</mat-list-item>
     </mat-nav-list>
   </mat-drawer>
@@ -47,7 +53,7 @@
         }
         </mat-form-field>
         <button mat-menu-item (click)="openWalletBottomSheet()">
-          <mat-icon>account_balance_wallet</mat-icon>
+          <mat-icon>wallet</mat-icon>
           <span>Switch wallet</span>
         </button>
         <button mat-menu-item (click)="disconnect()">

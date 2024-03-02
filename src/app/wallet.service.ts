@@ -4,7 +4,7 @@ import { BehaviorSubject, Observable, from, of } from 'rxjs';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { BaseWalletAdapter } from '@solana/wallet-adapter-base';
 
-import { Transaction } from './codec';
+import { Transaction } from './model/transaction';
 
 @Injectable({
   providedIn: 'root'

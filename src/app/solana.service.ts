@@ -1,5 +1,8 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, catchError, from, map, of } from 'rxjs';
+import { 
+  BehaviorSubject, Observable, 
+  asyncScheduler, catchError, forkJoin, from, map, mergeAll, of, reduce, scheduled 
+} from 'rxjs';
 
 import { 
   Connection, 
@@ -16,14 +19,16 @@ import {
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import { 
-  AccountLayout, RawAccount, 
-  MintLayout, RawMint, 
-  TOKEN_PROGRAM_ID, 
+  AccountLayout, Mint, 
+  getMint, getTokenMetadata, 
+  TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
 } from '@solana/spl-token';
+import { TokenMetadata } from '@solana/spl-token-metadata';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { getFavoriteDomain } from '@bonfida/spl-name-service';
 
-import { Account, Transaction } from './codec';
+import { Account, AssociatedTokenAccount, ToATA, Token } from './model/account';
+import { Transaction } from './model/transaction';
 import { environment as env } from '../environments/environment';
 
 @Injectable({
@@ -82,32 +87,56 @@ export class SolanaService {
     return from(this.connection.requestAirdrop(to, lamports));
   }
 
-  getTokenInfo(token: PublicKey): Observable<RawMint> {
-    return from(
-      this.connection.getAccountInfo(token)
-    ).pipe(
-      map((account) => {
-        if (account == null) {
-          throw new Error(`account not found`);
-        }
-
-        return MintLayout.decode(account.data);
-      })
-    )
+  getToken(token: PublicKey, programId: PublicKey = TOKEN_PROGRAM_ID): Observable<Mint> {
+    return from(getMint(this.connection, token, undefined, programId));
   }
 
-  getTokenAccountsByOwner(owner: PublicKey): Observable<Account<RawAccount>[]> {
-    return from(
-      this.connection.getTokenAccountsByOwner(owner, { 
-        programId: TOKEN_PROGRAM_ID 
-      })
-    ).pipe(
+  getTokenMetadata(token: PublicKey): Observable<TokenMetadata | null> {
+    return from(getTokenMetadata(this.connection, token))
+  }
+
+  getTokenAccountsByOwner(owner: PublicKey): Observable<AssociatedTokenAccount[]> {
+    return scheduled([
+        from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID })),
+        from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID })),
+    ], asyncScheduler).pipe(
+      mergeAll(),
       map((accounts) => accounts.value.flatMap(
-        (raw) => new Account(
-          raw.pubkey, 
-          AccountLayout.decode(raw.account.data),
-        )
-      ))
+        (raw) => {
+          const origin = new Account(
+            raw.pubkey, 
+            AccountLayout.decode(raw.account.data),
+          );
+
+          const ata = ToATA(origin);
+
+          let observable: Observable<Token>;
+          if (!raw.account.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+            observable = this.getToken(ata.mint).pipe(
+              map((mint) => new Token(mint))
+            );
+          } else {
+            observable = forkJoin({
+              mint: this.getToken(ata.mint, TOKEN_2022_PROGRAM_ID),
+              metadata: this.getTokenMetadata(ata.mint),
+            }).pipe(
+              map(({ mint, metadata }) => {
+                const token = new Token(mint);
+                token.metadata = metadata;
+
+                return token;
+              }) 
+            );
+          }
+
+          observable.subscribe(
+            (token) => ata.token = token 
+          );
+          
+          return ata;
+        }
+      )),
+      reduce((acc, value) => acc.concat(value)),
     );
   }
 

@@ -33,7 +33,7 @@
       </button>
     } @else {
       <span matTooltip="{{ getBalance | async }}">
-        {{ getBalance | async | currency: 'SOL' }}
+        {{ getBalance | async | currency : 'SOL' }}
       </span>
       <button mat-button [matMenuTriggerFor]="menu">
         {{ getAccount | async }}

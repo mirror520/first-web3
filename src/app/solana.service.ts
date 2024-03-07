@@ -87,31 +87,31 @@ export class SolanaService {
     return from(this.connection.requestAirdrop(to, lamports));
   }
 
-  getToken(token: PublicKey, programId: PublicKey = TOKEN_PROGRAM_ID): Observable<Mint> {
-    return from(getMint(this.connection, token, undefined, programId));
+  getToken(mint: PublicKey, programId: PublicKey = TOKEN_PROGRAM_ID): Observable<Mint> {
+    return from(getMint(this.connection, mint, undefined, programId));
   }
 
-  getTokenMetadata(token: PublicKey): Observable<TokenMetadata | null> {
-    return from(getTokenMetadata(this.connection, token))
+  getTokenMetadata(mint: PublicKey): Observable<TokenMetadata | null> {
+    return from(getTokenMetadata(this.connection, mint));
   }
 
   getTokenAccountsByOwner(owner: PublicKey): Observable<AssociatedTokenAccount[]> {
     return scheduled([
-        from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID })),
-        from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID })),
+      from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID })),
+      from(this.connection.getTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID })),
     ], asyncScheduler).pipe(
       mergeAll(),
       map((accounts) => accounts.value.flatMap(
         (raw) => {
-          const origin = new Account(
-            raw.pubkey, 
+          const account = new Account(
+            raw, 
             AccountLayout.decode(raw.account.data),
           );
 
-          const ata = ToATA(origin);
+          const ata = ToATA(account);
 
           let observable: Observable<Token>;
-          if (!raw.account.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+          if (!ata.isToken2022()) {
             observable = this.getToken(ata.mint).pipe(
               map((mint) => new Token(mint))
             );
@@ -163,28 +163,30 @@ export class SolanaService {
     )
   }
 
-  transfer(source: PublicKey, destination: PublicKey, amount: number, owner: PublicKey): Observable<Transaction> {
-    const keys = [
-      { pubkey: source, isSigner: false, isWritable: true },
-      { pubkey: destination, isSigner: false, isWritable: true },
-      { pubkey: owner, isSigner: true, isWritable: false },
-    ];
-
-    // 3 => Self::Transfer { amount }
-    const data = Buffer.alloc(9);
-    data.writeUInt8(3);                      // cmd (1 byte)
-    data.writeBigInt64LE(BigInt(amount), 1); // amount (8 bytes)
-
-    const txInstruction = new TransactionInstruction({ keys, programId: TOKEN_PROGRAM_ID , data });
-
+  transfer(source: PublicKey, destination: PublicKey, amount: number, owner: PublicKey, instructions: TransactionInstruction[]): Observable<Transaction> {
     return from(
-      this.connection.getLatestBlockhashAndContext()
+      this.connection.getLatestBlockhashAndContext(),
     ).pipe(
       map((result) => {
+        const keys = [
+          { pubkey: source, isSigner: false, isWritable: true },
+          { pubkey: destination, isSigner: false, isWritable: true },
+          { pubkey: owner, isSigner: true, isWritable: false },
+        ];
+
+        // 3 => Self::Transfer { amount }
+        const data = Buffer.alloc(9);
+        data.writeUInt8(3);                      // cmd (1 byte)
+        data.writeBigInt64LE(BigInt(amount), 1); // amount (8 bytes)
+
+        instructions.push(new TransactionInstruction(
+          { keys, programId: TOKEN_PROGRAM_ID , data }
+        )) ;
+
         const messageV0 = new TransactionMessage({
           payerKey: owner,
           recentBlockhash: result.value.blockhash,
-          instructions: [ txInstruction ],
+          instructions: instructions,
         }).compileToV0Message();
 
         const trx = new VersionedTransaction(messageV0);

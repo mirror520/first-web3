@@ -1,17 +1,53 @@
-<table mat-table [dataSource]="tokenAccounts" class="mat-elevation-z8">
-  <ng-container matColumnDef="mint">
-    <th mat-header-cell *matHeaderCellDef>Mint</th>
-    <td mat-cell *matCellDef="let account">{{ account.display_mint }}</td>
-  </ng-container>
+<mat-accordion class="mat-elevation-z8">
+@for (account of tokenAccounts | async; track account; let i = $index) {
+  <mat-expansion-panel hideToggle>
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        {{ account.display_mint }}
+      </mat-panel-title>
+      <mat-panel-description>
+        {{ account.amount | currency }}
+      </mat-panel-description>
+    </mat-expansion-panel-header>
 
-  <ng-container matColumnDef="amount">
-    <th mat-header-cell *matHeaderCellDef>Amount</th>
-    <td mat-cell *matCellDef="let account">{{ account.amount }}</td>
-  </ng-container>
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Transfer Token</mat-card-title>
+      </mat-card-header>
+      <form class="transfer-form" 
+            [formGroup]="forms[i]">
+        <mat-form-field class="form-field">
+          <mat-label>To wallet</mat-label>
+          <input matInput formControlName="toWallet">
+        @if (!forms[i].valid) {
+          <mat-error>{{ getWalletError(forms[i].get('toWallet')) }}</mat-error>
+        }
+        </mat-form-field>
 
-  <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-  <tr mat-row *matRowDef="let account; columns: displayedColumns;"></tr>
-</table>
+        <mat-form-field floatLabel="always">
+          <mat-label>Amount</mat-label>
+          <mat-icon matPrefix>attach_money</mat-icon>
+          <input matInput type="number" class="amount-input" 
+                 formControlName="amount" placeholder="0">
+          <span matTextSuffix>.00</span>
+        @if (!forms[i].valid) {
+          <mat-error>{{ getAmountError(forms[i].get('amount')) }}</mat-error>
+        }
+        </mat-form-field>
+      </form>
+
+        <mat-card-actions align="end">
+          <button mat-fab extended color="primary" 
+                  [disabled]="!forms[i].valid" 
+                  (click)="transfer(account, forms[i])">
+            <mat-icon>send_money</mat-icon>
+            Send
+          </button>
+        </mat-card-actions>
+    </mat-card>
+  </mat-expansion-panel>
+}
+</mat-accordion>
 
 <button mat-fab color="warn" class="mat-fab-bottom-right" 
         (click)="refreshTokens()">

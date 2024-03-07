@@ -1,54 +1,67 @@
-import { PublicKey } from "@solana/web3.js";
-import { Mint, RawAccount } from "@solana/spl-token";
+import { AccountInfo, PublicKey } from "@solana/web3.js";
+import { Mint, RawAccount, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { TokenMetadata } from "@solana/spl-token-metadata";
 
 export class Account<T> {
   pubkey: PublicKey;
+  info: AccountInfo<Buffer>;
   data: T;
 
-  constructor(pubkey: PublicKey, data: T) {
-    this.pubkey = pubkey;
+  constructor(
+    raw: { 
+      account: AccountInfo<Buffer>; 
+      pubkey: PublicKey;
+    }, 
+    data: T,
+  ) {
+    this.pubkey = raw.pubkey;
+    this.info = raw.account;
     this.data = data;
   }
 }
 
 export function ToATA<T extends RawAccount>(
-  origin: Account<T>
+  account: Account<T>
 ): AssociatedTokenAccount {
-  return new AssociatedTokenAccount(origin);
+  return new AssociatedTokenAccount(account);
 }
 
 export class AssociatedTokenAccount {
-  private _pubkey: PublicKey;
-  private _raw: RawAccount;
+  private _account: Account<RawAccount>;
   private _token: Token | undefined;
 
-  constructor(origin: Account<RawAccount>) {
-    this._pubkey = origin.pubkey;
-    this._raw = origin.data;
+  constructor(account: Account<RawAccount>) {
+    this._account = account;
+  }
+
+  public isToken2022(): boolean {
+    return this._account.info.owner.equals(TOKEN_2022_PROGRAM_ID);
+  }
+
+  public get account(): RawAccount {
+    return this._account.data;
   }
 
   public get pubkey(): PublicKey {
-    return this._pubkey;
+    return this._account.pubkey;
   }
 
   public get mint(): PublicKey {
-    return this._raw.mint;
+    return this.account.mint;
   }
 
   public get display_mint(): string {
-    const mint = this._raw.mint;
-
     const token = this.token;
     if ((token != null) && (token.metadata != null)) {
       return token.metadata.symbol;
     }
 
-    return `Unknown (${mint.toBase58().slice(0, 10)}...)`;
+    return `${this.mint.toBase58().slice(0, 10)}...`;
   }
 
   public get amount(): number {
-    return Number(this._raw.amount);
+    const amount = Number(this.account.amount);
+    return amount / Math.pow(10, this.decimals);
   }
 
   public set token(value: Token | undefined) {
@@ -57,6 +70,15 @@ export class AssociatedTokenAccount {
 
   public get token(): Token | undefined{
     return this._token;
+  }
+
+  public get decimals(): number {
+    const token = this.token;
+    if (token == undefined) {
+      return 9;
+    }
+
+    return token.mint.decimals;
   }
 }
 
